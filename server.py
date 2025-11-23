@@ -101,25 +101,11 @@ def fake_login():
             <button type="submit">Entrar</button>
         </form>
         """, 200
-    if request.method == 'POST':
-        #resp = make_response(f'Fazendo o login como {request.form["email"]}')
-        #resp.set_cookie('user', request.form["email"])
-        
-        #return resp
-
-        resp = make_response(f'Fazendo o login como {request.json["user"]}')
-        resp.set_cookie('user', request.json["user"])
-        
-        return resp
-
-
-    if request.method == 'POST':
-
-        resp = make_response(f'Fazendo o login como {request.json["user"]}')
-        resp.set_cookie('user', request.json["user"])
-        
-        return resp
     
+    if request.method == 'POST':
+        resp = make_response(f'Fazendo o login como {request.json["user"]}')
+        resp.set_cookie('user', request.json["user"])
+        return resp
     else:
         user = request.cookies.get('user')            
         if user:
