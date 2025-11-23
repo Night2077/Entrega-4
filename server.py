@@ -1,31 +1,10 @@
+from flask import request, make_response, jsonify, redirect, url_for, abort
+from database_test import app, db, User
 
-from flask import Flask, request, make_response, jsonify
-from flask_sqlalchemy import SQLAlchemy
-import os
-
-app = Flask(__name__)
-
-# Configuração do banco SQLite local
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "users.db")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-db = SQLAlchemy(app)
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    nome = db.Column(db.String(120), nullable=False)
-    senha = db.Column(db.String(120), nullable=False)
-
-# Criar tabelas caso não existam
-with app.app_context():
-    db.create_all()
-
+#1.1 Cadastro de Usuário
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
     if request.method == "GET":
-        # Resposta GET com formulário HTML
         html = """
         <html>
         <body>
@@ -47,7 +26,7 @@ def cadastro():
         content_type = request.headers.get('Content-Type')
         print(f"Content-Type recebido: {content_type}")
         
-        # Log dos dados brutos do corpo (para debug)
+        # Log dos dados brutos do corpo 
         print(f"Dados brutos do corpo: {request.get_data()}")
         
         # Obter dados do formulário
@@ -82,7 +61,130 @@ def cadastro():
 
         return resposta
 
+#1.2 Login de Usuário
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return """
+        <h2>Login</h2>
+        <form method="POST" action="/login">
+            Email: <input type="email" name="email" required><br><br>
+            Senha: <input type="password" name="senha" required><br><br>
+            <button type="submit">Entrar</button>
+        </form>
+        """, 200
+
+    # POST
+    email = request.form.get("email")
+    senha = request.form.get("senha")
+
+    user = User.query.filter_by(email=email, senha=senha).first()
+
+    if not user:
+        return make_response("Credenciais inválidas", 401)
+
+    # login bem sucedido → setar cookie user_id
+    resp = make_response("Login OK!", 200)
+    resp.set_cookie("user_id", str(user.id))
+    return resp
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def fake_login():
+    if request.method == 'GET':
+        return """
+        <h2>Login</h2>
+        <form method="POST" action="/login">
+            email: <input type="email" name="email" required><br><br>
+            senha: <input type="password" name="senha" required><br><br>
+            <button type="submit">Entrar</button>
+        </form>
+        """, 200
+    if request.method == 'POST':
+        #resp = make_response(f'Fazendo o login como {request.form["email"]}')
+        #resp.set_cookie('user', request.form["email"])
+        
+        #return resp
+
+        resp = make_response(f'Fazendo o login como {request.json["user"]}')
+        resp.set_cookie('user', request.json["user"])
+        
+        return resp
+
+
+    if request.method == 'POST':
+
+        resp = make_response(f'Fazendo o login como {request.json["user"]}')
+        resp.set_cookie('user', request.json["user"])
+        
+        return resp
+    
+    else:
+        user = request.cookies.get('user')            
+        if user:
+            return f'Ja logado como {user}'
+        else:
+            return 'Nao logado ainda'
+        
+
+@app.route("/logout", methods=["GET", "POST"])
+def logout():
+    if request.method == "GET":
+        return """
+        <h2>Logout</h2>
+        <form method="POST" action="/logout">
+            <button type="submit">Sair</button>
+        </form>
+        """, 200
+
+    if request.method == "POST":
+        resp = make_response("Logout realizado", 200)
+        resp.set_cookie("user_id", "X", max_age=0)   # apaga cookie
+        return resp
+
+
+# Página inicial
+@app.route("/")
+def home():
+    user_id = request.cookies.get("user_id")
+    
+    if not user_id or user_id == "X":
+        # Redireciona para login se não estiver autenticado
+        return """
+        <html>
+        <head><title>Portal Principal</title></head>
+        <body>
+            <h1>Bem-vindo ao Portal Principal</h1>
+            <p>Você não está logado.</p>
+            <a href="/login"><button>Fazer Login</button></a>
+            <a href="/cadastro"><button>Cadastrar</button></a>
+        </body>
+        </html>
+        """, 200
+
+    user = User.query.get(user_id)
+    if not user:
+        # Cookie inválido - redireciona para login
+        resp = make_response(redirect(url_for('login')))
+        resp.set_cookie("user_id", "", max_age=0)
+        return resp
+
+    return f"""
+    <html>
+    <head><title>Portal Principal</title></head>
+    <body>
+        <h1>Bem-vindo, {user.nome}!</h1>
+        <p>Email: {user.email}</p>
+        <a href="/logout"><button>Sair</button></a>
+    </body>
+    </html>
+    """, 200
+
+
 if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
 
 #teste
