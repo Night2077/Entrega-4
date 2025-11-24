@@ -1,10 +1,10 @@
 from flask import request, make_response, jsonify, redirect, url_for, abort
-from database_test import app, db, User
+from database_test import app, db, User #, Session
 
 #1.1 Cadastro de Usuário
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
-    if request.method == "GET":
+    if request.method == "GET": # mostrar formulário de cadastro
         html = """
         <html>
         <body>
@@ -63,36 +63,9 @@ def cadastro():
 
 #1.2 Login de Usuário
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        return """
-        <h2>Login</h2>
-        <form method="POST" action="/login">
-            Email: <input type="email" name="email" required><br><br>
-            Senha: <input type="password" name="senha" required><br><br>
-            <button type="submit">Entrar</button>
-        </form>
-        """, 200
-
-    # POST
-    email = request.form.get("email")
-    senha = request.form.get("senha")
-
-    user = User.query.filter_by(email=email, senha=senha).first()
-
-    if not user:
-        return make_response("Credenciais inválidas", 401)
-
-    # login bem sucedido → setar cookie user_id
-    resp = make_response("Login OK!", 200)
-    resp.set_cookie("user_id", str(user.id))
-    return resp
-
-
 @app.route('/login', methods=['GET', 'POST'])
 def fake_login():
-    if request.method == 'GET':
+    if request.method == 'GET': # mostrar formulário de login
         return """
         <h2>Login</h2>
         <form method="POST" action="/login">
@@ -102,21 +75,27 @@ def fake_login():
         </form>
         """, 200
     
-    if request.method == 'POST':
-        resp = make_response(f'Fazendo o login como {request.json["user"]}')
-        resp.set_cookie('user', request.json["user"])
+    if request.method == "POST":
+        email = request.form.get("email")
+        senha = request.form.get("senha")
+        user = User.query.filter_by(email=email, senha=senha).first() # buscar usuário no banco de dados
+
+        if not user: 
+            return abort(401, description="Credenciais inválidas")
+
+        # login bem sucedido 
+        resp = make_response("Login OK!", 200)
+        resp.set_cookie("user_id", str(user.id))  # setar cookie com ID do usuário
+
+        print(f"content_type: {request.content_type}")
+        print(f"Email recebido: {email}")
+        print(f"Senha recebida: {senha}")
+
         return resp
-    else:
-        user = request.cookies.get('user')            
-        if user:
-            return f'Ja logado como {user}'
-        else:
-            return 'Nao logado ainda'
-        
 
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
-    if request.method == "GET":
+    if request.method == "GET": # mostrar formulário de logout
         return """
         <h2>Logout</h2>
         <form method="POST" action="/logout">
@@ -129,14 +108,16 @@ def logout():
         resp.set_cookie("user_id", "X", max_age=0)   # apaga cookie
         return resp
 
+#@app.route('/delete-cookie')
+#def delete_cookie():
+#    res.set_cookie('user', 'qualquer_coisa', max_age=0)
+#    return res 
 
 # Página inicial
 @app.route("/")
 def home():
     user_id = request.cookies.get("user_id")
-    
-    if not user_id or user_id == "X":
-        # Redireciona para login se não estiver autenticado
+    if not user_id or user_id == "X": # Redireciona para login se não estiver autenticado
         return """
         <html>
         <head><title>Portal Principal</title></head>
@@ -148,14 +129,14 @@ def home():
         </body>
         </html>
         """, 200
-
-    user = User.query.get(user_id)
-    if not user:
-        # Cookie inválido - redireciona para login
+    
+    user = User.query.get(user_id) # buscar usuário no banco de dados
+    if not user: # Cookie inválido - redireciona para login
         resp = make_response(redirect(url_for('login')))
         resp.set_cookie("user_id", "", max_age=0)
         return resp
 
+    # Usuário autenticado - mostrar página principal
     return f"""
     <html>
     <head><title>Portal Principal</title></head>
@@ -173,4 +154,3 @@ if __name__ == "__main__":
         db.create_all()
     app.run(debug=True)
 
-#teste

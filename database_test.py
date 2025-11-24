@@ -25,11 +25,11 @@ class User(db.Model):
 
 # Definição do Modelo de Sessão (Necessário para a Parte 1.3)
 # Você pode descomentar isso quando chegar na parte 1.3
-'''
-class Session(db.Model):
-    session_id = db.Column(db.String(32), primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-'''
+
+#class Session(db.Model):
+#    session_id = db.Column(db.String(32), primary_key=True)
+#    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
 
 
 #testando o git 
