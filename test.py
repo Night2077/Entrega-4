@@ -18,9 +18,9 @@ def gera_digest_senha(password):
     combinado = salt + digest  
     
     bash_base64_em_str = b64encode(combinado).decode('ascii')
-    hash_em_bytes_denovo = b64decode(bash_base64_em_str.encode('ascii'))
+    #hash_em_bytes_denovo = b64decode(bash_base64_em_str.encode('ascii'))
     #return b64encode(combinado).decode("ascii")
-    return bash_base64_em_str,hash_em_bytes_denovo
+    return bash_base64_em_str
 
 #Verificação da senha
 def verifica_senha(password, senha_hash_base64):
@@ -39,6 +39,6 @@ def verifica_senha(password, senha_hash_base64):
 
 
 
-#print(gera_digest_senha("minha_senha_secreta"))
+print(gera_digest_senha("senha1234"))
 
-print(verifica_senha("minha_senha_secreta",gera_digest_senha("minha_senha_secreta")[0]))
+#print(verifica_senha("minha_senha_secreta",gera_digest_senha("minha_senha_secreta")))

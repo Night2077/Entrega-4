@@ -31,13 +31,15 @@ class Session(db.Model):
 
 #Derivando o digest da senha e codificando em Base64
 def gera_digest_senha(password):
-
+    print('senha original',password)
     salt = os.urandom(16)
+    print('salt',salt)
     kdf = Scrypt(salt=salt, length=32, n=2**14, r=8, p=1, backend=default_backend()) 
     digest = kdf.derive(password.encode("utf-8")) # derivar o digest da senha
+    print('digest',digest)
     combinado = salt + digest  
     bash_base64_em_str = b64encode(combinado).decode('ascii') # codificar em Base64
-
+    print('base64',bash_base64_em_str)
     return bash_base64_em_str
 
 #Verificação da senha
@@ -135,7 +137,7 @@ def login():
         
         if not verifica_senha(senha, user.senha):
             return abort(401, description="Credenciais inválidas")
-        
+
         # Criar nova sessão
         session_id = gerar_session_id()
         sess = Session(session_id=session_id, user_id=user.id)
@@ -151,6 +153,7 @@ def login():
         print(f"session cookies: {session_id}")
         print(f"Email recebido: {email}")
         print(f"Senha recebida: {senha}")
+        print(f"User server: {user.senha}")
 
         return resp
 
