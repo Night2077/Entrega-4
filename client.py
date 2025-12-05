@@ -8,62 +8,45 @@ import sys
 import os
 import json
 
-
 class EncryptionManager:
     def __init__(self):
-        self.key = os.urandom(32) # Chave AES-256
-        self.nonce = os.urandom(16) # AES-CTR nonce
-        self.aes_context = Cipher(algorithms.AES(self.key), modes.CTR(self.nonce), backend=default_backend()) # AES-CTR
-        self.encryptor = self.aes_context.encryptor() # Criptografar
-        self.decryptor = self.aes_context.decryptor() # Descriptografar
-    
-    def updateEncryptor(self, plaintext):
-        return self.encryptor.update(plaintext)
-    
-    def finalizeEncryptor(self):
-        return self.encryptor.finalize()
-    
-    def updateDecryptor(self, ciphertext):
-        return self.decryptor.update(ciphertext)
-    
-    def finalizeDecryptor(self):
-        return self.decryptor.finalize()
+        self.aes_key = os.urandom(32)   # chave AES-256
+        self.mac_key = os.urandom(32)   # chave para HMAC-SHA256
+        self.nonce = os.urandom(16)     # IV para AES-CTR
+        self.cipher = Cipher(algorithms.AES(self.aes_key),modes.CTR(self.nonce),backend=default_backend())
 
-    def calculate_hmac(self, data_chunks): 
-        hmac_key = os.urandom(32) # Chave HMAC
-        h = hmac.HMAC(hmac_key, hashes.SHA256(), backend=default_backend())
-        for chunk in data_chunks:
-            h.update(chunk)
-        return h.finalize()
+    def encrypt(self, plaintext):
+        encryptor = self.cipher.encryptor()
+        return encryptor.update(plaintext) + encryptor.finalize()
     
+    def decrypt(self, ciphertext):
+        decryptor = self.cipher.decryptor()
+        return decryptor.update(ciphertext) + decryptor.finalize()
+
+    def calculate_hmac(self, data):
+        h = hmac.HMAC(self.mac_key, hashes.SHA256(), backend=default_backend())
+        h.update(data)
+        return h.finalize()
+
     def get_keys_concatenated(self):
-        return self.encryptor._key + self.decryptor._key  # Concatenar chaves AES e HMAC
+        # AES_KEY (32) + HMAC_KEY (32) + NONCE (16)
+        return self.aes_key + self.mac_key + self.nonce
+
 
 
 def client(email, password):
-    
+    encry = EncryptionManager()
+
     # Prepara os dados brutos (Plaintext) como JSON
     login_payload = json.dumps({"email": email, "password": password}).encode('utf-8')
 
-    # 2. Gerar chaves aleatórias e IV
-    aes_key = os.urandom(32)  # AES-256
-    mac_key = os.urandom(32)  # Chave para HMAC
-    iv = os.urandom(16)       # Vetor de Inicialização (Nonce)
-
-    # 3. Encriptação Simétrica (AES-CTR)
-    cipher = Cipher(algorithms.AES(aes_key), modes.CTR(iv), backend=default_backend())
-    encryptor = cipher.encryptor()
-    # No modo CTR, o tamanho da saída é igual à entrada
-    ciphertext = encryptor.update(login_payload) + encryptor.finalize()
-
-    # 4. Calcular HMAC do texto cifrado (Encrypt-then-MAC)
-    h = hmac.HMAC(mac_key, hashes.SHA256(), backend=default_backend())
-    h.update(ciphertext)
-    hmac_signature = h.finalize()
-
-    # 5. Preparar dados para envio (Base64 encoding)
-    # Concatenar chaves e IV: [AES_KEY 32b][MAC_KEY 32b][IV 16b]
-    session_keys_raw = aes_key + mac_key + iv
+    # AES-CTR Encryption  
+    ciphertext = encry.encrypt(login_payload)
+    # HMAC Ciphertext
+    hmac_signature = encry.calculate_hmac(ciphertext)
+    # AES and HMAC keys concatenated
+    session_keys_raw = encry.get_keys_concatenated()
+    
     # Encode em Base64
     session_keys_b64 = base64.b64encode(session_keys_raw).decode('utf-8')
     ciphertext_b64 = base64.b64encode(ciphertext).decode('utf-8')
@@ -85,12 +68,12 @@ def client(email, password):
     }
 
     try:
-        r = requests.post(url, data=data) 
+        r = requests.post(url, data=data)  # Enviar requisição POST
         print(f"\nStatus Code: {r.status_code}")
-        if r.status_code == 200:
+        if r.status_code == 200: # Login bem sucedido
             if 'session_id' in r.cookies:
                 print(f"Login Bem Sucedido! Session ID: {r.cookies['session_id']}")
-            else:
+            else: 
                 print("Login realizado, mas nenhum cookie session_id retornado.")
         else:
             print(f"Falha no login: {r.text}")
