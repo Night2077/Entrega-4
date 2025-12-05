@@ -1,12 +1,17 @@
 import hashlib
-from flask import Flask
+from flask import Flask, json
 from flask_sqlalchemy import SQLAlchemy
 from flask import request, make_response, jsonify, redirect, url_for, abort
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidKey
+from cryptography.exceptions import InvalidKey, InvalidSignature
 from base64 import b64encode, b64decode
 import os
+import requests
+
+# 1 - Sistema de cadastro e autenticação de usuários
 
 app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -126,18 +131,56 @@ def login():
         </form>
         """, 200
     
-    if request.method == "POST":
-        email = request.form.get("email")
-        senha = request.form.get("senha")
-        
-        user = User.query.filter_by(email=email).first()
+    elif request.method == 'POST':
+         # Log do Content-Type recebido
+        if 'session_keys' in request.form and 'ciphertext' in request.form:
+            try:
+                # Extrair dados do formulário
+                session_keys_b64 = request.form.get('session_keys')
+                cyphertext_b64 = request.form.get('ciphertext')
+                hmac_b64 = request.form.get('hmac')
 
-        if not user:
-            return abort(401, description="Credenciais inválidas")
-        
-        if not verifica_senha(senha, user.senha):
-            return abort(401, description="Credenciais inválidas")
+                print(f"session_keys (base64): {session_keys_b64}")
+                print(f"ciphertext (base64): {cyphertext_b64}")
+                print(f"hmac (base64): {hmac_b64}")
 
+                # Decodificar
+                session_keys = b64decode(session_keys_b64)
+                cyphertext = b64decode(cyphertext_b64)
+                hmac_tag = b64decode(hmac_b64)
+
+                # Extrair chaves
+                aes_key = session_keys[0:32]
+                mac_key = session_keys[32:64]
+                iv = session_keys[64:80]
+
+                # Verificar HMAC
+                h = hmac.HMAC(mac_key, hashes.SHA256(), backend=default_backend())
+                h.update(cyphertext)
+                h.verify(hmac_tag)
+
+                # Descriptografar AES-CTR
+                cipher = Cipher(algorithms.AES(aes_key), modes.CTR(iv), backend=default_backend())
+                decryptor = cipher.decryptor()
+                plaintext = decryptor.update(cyphertext) + decryptor.finalize()
+                
+                # Extrair email e senha do JSON
+                login_data = json.loads(plaintext.decode('utf-8'))
+                email = login_data.get('email')
+                senha = login_data.get('password')
+
+            except (InvalidSignature, ValueError, KeyError) as e: # Dados inválidos ou corrompidos
+                print(f"Erro ao processar os dados criptografados: {e}")
+                return abort(400, description="Dados inválidos ou corrompidos")
+
+        user = User.query.filter_by(email=email).first() 
+
+        if not user: # Usuário não encontrado
+            return abort(401, description="Credenciais inválidas")
+            
+        if not verifica_senha(senha, user.senha): # Senha incorreta
+            return abort(401, description="Credenciais inválidas")
+            
         # Criar nova sessão
         session_id = gerar_session_id()
         sess = Session(session_id=session_id, user_id=user.id)
@@ -147,16 +190,17 @@ def login():
         # login bem sucedido 
         resp = make_response("Login OK!", 200)
         resp.set_cookie("session_id", session_id)  # setar cookie com ID da sessão
-        
+            
         #contenty_type
         print(f"content_type: {request.content_type}")
         print(f"session cookies: {session_id}")
         print(f"Email recebido: {email}")
         print(f"Senha recebida: {senha}")
-        print(f"User server: {user.senha}")
+        #print(f"User server: {user.senha}")
 
         return resp
 
+#1.2 Logout de Usuário
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
 
