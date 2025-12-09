@@ -7,9 +7,12 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidKey, InvalidSignature
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization
 from base64 import b64encode, b64decode
 import os
 import requests
+from client import EncryptionManager, TransmissionManager
 
 # 1 - Sistema de cadastro e autenticação de usuários
 
@@ -18,6 +21,34 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(BASE_DIR, "users.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
+
+# 1. Gerar chave privada
+private_key = rsa.generate_private_key(
+    public_exponent=65537,
+    key_size=2048
+)
+
+# 2. Salvar chave privada (PEM)
+with open("my_key.pem", "wb") as f:
+    f.write(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption()
+        )
+    )
+
+# 3. Extrair chave pública
+public_key = private_key.public_key()
+
+# 4. Salvar chave pública (PEM)
+with open("my_key_pub.pem", "wb") as f:
+    f.write(
+        public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+    )
 
 # Modelo de Usuário
 class User(db.Model):
@@ -132,6 +163,11 @@ def login():
         """, 200
     
     elif request.method == 'POST':
+        email = None
+        senha = None
+        
+        encrypt = TransmissionManager()
+        
          # Log do Content-Type recebido
         if 'session_keys' in request.form and 'ciphertext' in request.form:
             try:
@@ -149,10 +185,13 @@ def login():
                 cyphertext = b64decode(cyphertext_b64)
                 hmac_tag = b64decode(hmac_b64)
 
-                # Extrair chaves
-                aes_key = session_keys[0:32]
-                mac_key = session_keys[32:64]
-                iv = session_keys[64:80]
+                # decrypy session_keys
+                session_key = encrypt.decrypt_with_private_key(session_keys,private_key)
+
+                #
+                aes_key = session_key[:32]
+                mac_key = session_key[32:64]
+                iv      = session_key[64:80]
 
                 # Verificar HMAC
                 h = hmac.HMAC(mac_key, hashes.SHA256(), backend=default_backend())
@@ -161,9 +200,8 @@ def login():
 
                 # Descriptografar AES-CTR
                 cipher = Cipher(algorithms.AES(aes_key), modes.CTR(iv), backend=default_backend())
-                decryptor = cipher.decryptor()
-                plaintext = decryptor.update(cyphertext) + decryptor.finalize()
-                
+                plaintext = cipher.decryptor().update(cyphertext) + cipher.decryptor().finalize()
+
                 # Extrair email e senha do JSON
                 login_data = json.loads(plaintext.decode('utf-8'))
                 email = login_data.get('email')
@@ -199,7 +237,7 @@ def login():
         #print(f"User server: {user.senha}")
 
         return resp
-
+    
 #1.2 Logout de Usuário
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
@@ -229,7 +267,7 @@ def logout():
 # Página inicial
 @app.route("/")
 def home():
-
+    
     session_id = request.cookies.get("session_id")
 
     if not session_id:
